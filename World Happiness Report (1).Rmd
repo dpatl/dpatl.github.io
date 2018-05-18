@@ -1,0 +1,125 @@
+---
+title: "World Happiness Report Data"
+output: html_document
+---
+# Introduction  
+
+Do you love where you live and are shocked why everyone just doesn't live in your country? Or maybe you absolutely hate where you live and don't understand why anyone would move to your country. Either way, you can get your questions answered through this R analysis! We will perform a data science pipeline on the World Happiness Report.
+The World Happiness Report is a dataset released by the United Nations anually that rank's countries based on happiness levels. The report contains a Happiness Score that is then used to determine a countries rank relative to other country's scores. There are different metrics are juxtaposed with the score and I was curious to see which one metric could be singled out (if at all) to be the best predictor of a country's score. 
+
+To learn more about the World Happiness Report visit : http://worldhappiness.report/ed/2018/  
+
+# Required Libraries  
+Replication of analysis requires RStudio version 3.4.3 and the following libraries.
+```{r setup, include= TRUE, message = FALSE}
+require(rvest)
+require(magrittr)
+require(dplyr)
+require(tidyr)
+require(ggplot2)
+require(tree)
+require(maps)
+library(ggmap)
+library(stringr)
+```
+
+# 1. Gather Data
+Welcome to the first step in the data pipeline! We can't perform any operations or conduct any analysis until we have data to work with. Because we are strong, independent data scientists, we do not require a CSV file to be provided beforehand. Instead, we obtain our data through a process called HTML scraping. HTML scraping involves using pre-existing html files in webpages to extract the data we are interested in. 
+
+```{r data, include = TRUE, warning = FALSE}
+url <- "https://en.wikipedia.org/wiki/World_Happiness_Report"
+df_2018 <- read_html(url) %>% 
+        #look for html node table
+        html_nodes("table") %>% 
+        #extract 5th occurence of html table (Wikipedia treats things as tables that shouldn't be tables)
+        extract2(5) %>%
+        html_table() %>% 
+        as.data.frame()
+as_tibble(df_2018)
+```
+
+Hey that's a pretty good looking data frame! However, looks can be decieving and we still need to tidy up this frame.
+
+
+
+
+# 2. Tidy Data 
+
+Tidying data is a process where data scientists structure a dataset to make it easier to perform analysis and operations on the data. Hidden in this data frame is a single NA, or missing entry for our Perceptions of Corruption column for the entity identifying as the United Arab Emirates. Unfortunately, I have no friends in the United Nations and so I never got an answer to why this entry was missing, but that's okay, we will continue on using plan B, imputing data. Imputing data requires us to insert a value for the missing entry in an unbiased way. We will accomplish this by calculating the mean of Perceptions of Corruption and inserting that value as our missing data. This will ensure the central tendency of the data is the same.
+
+Another checkpoint for tidy data is ensuring that column types match their values. Everything is dandy up until Perceptions of Corruption. This column is encoded as "chr vector" or string which mean's all of its values will also be a string. This is detrimental to our methods because we have to compute the mean of the column to use in imputing for our missing data and the mean of strings makes no sense. Let's convert every value in the column to a double.
+```{r tidy, include = TRUE, warning = FALSE}
+df_2018 <- 
+  df_2018 %>% 
+  #rename columns so that they are easier on the eye
+  set_colnames(c("Rank", "Country","Score","GDP", "Social_Support","Health_Expectancy","Freedom","Generosity", "Perceptions_Of_Corruption"))
+  #type convert from character vector to numeric double
+  df_2018$Perceptions_Of_Corruption <- as.numeric(as.character(df_2018$Perceptions_Of_Corruption))
+  #impute mean value for missing entry
+  df_2018[is.na(df_2018)] <- mean(df_2018$Perceptions_Of_Corruption, na.rm = TRUE)
+as_tibble(df_2018)
+```  
+Our data set is looking good! We're ready to Explore.
+
+
+# 3. Exploratory Data Analysis    
+```{r EDA, include = TRUE, warning = FALSE, message = FALSE}
+
+df_2018 %>% ggplot(aes(x= Score, y = GDP)) + geom_point() + geom_smooth(lm = loess) + labs(title = "Score vs GDP")
+
+df_2018 %>% ggplot(aes(x= Score, y = Health_Expectancy)) + geom_point() + geom_smooth(lm = loess) + labs(title = "Score vs Health Expectancy")
+
+df_2018 %>% ggplot(aes(x= Score, y = Freedom)) + geom_boxplot() + labs(title = "Score vs Freedom")
+
+map.world <- map_data("world")
+map.world
+
+map.world_joined <- left_join(map.world, df_2018, by = c('region' = 'Country'))
+
+map.world_joined <- map.world_joined %>% mutate(fill_flg = ifelse(is.na(rank),F,T))
+head(map.world_joined)
+
+df.country_points <- data.frame(country = c("Singapore","Luxembourg"),stringsAsFactors = F)
+glimpse(df.country_points)
+
+geocode.country_points <- geocode(df.country_points$country)
+
+df.country_points <- cbind(df.country_points,geocode.country_points)
+
+ggplot() +
+  geom_polygon(data = map.world_joined, aes(x = long, y = lat, group = group, fill = fill_flg)) +
+  geom_point(data = df.country_points, aes(x = lon, y = lat), color = "#e60000") +
+  scale_fill_manual(values = c("#CCCCCC","#e60000")) +
+  labs(title = "Test"") +
+  theme(text = element_text(family = "Gill Sans", color = "#FFFFFF")
+        ,panel.background = element_rect(fill = "#444444")
+        ,plot.background = element_rect(fill = "#444444")
+        ,panel.grid = element_blank()
+        ,plot.title = element_text(size = 30)
+        ,plot.subtitle = element_text(size = 10)
+        ,axis.text = element_blank()
+        ,axis.title = element_blank()
+        ,axis.ticks = element_blank()
+        ,legend.position = "none"
+        )
+
+```  
+
+# 4. Machine Learning 
+
+
+# Hypothesis Testing
+The hypothesis testing framework is set up so that we use our findings to reject the hypothesis that a change in each factor does not change the score. We reject this null hypothesis if our p value is greater than our $\alpha$ value, which we will take to be .05.
+
+# Linear Regression
+Let's fit a regression model to our data. This can be accomplished with the lm function. We want to see how Score changes based on all the relevant columns so our model should look something like :
+$$ Score \approx \beta_0 + \beta_1 \times GDP + \beta_2 \times SocialSupport + \beta_3 \times  HealthExpectancy + \beta_4 \times Freedom + \beta_5 \times Generosity + \beta_6 \times PerceptionsOfCorruption $$
+
+```{r ML, include=TRUE}
+
+fit <- lm(Score ~ 1 + GDP+Social_Support+Health_Expectancy+ Health_Expectancy+Freedom+Generosity+Perceptions_Of_Corruption, data = df_2018)
+broom::tidy(fit) %>% knitr::kable() 
+```
+The table above tells us how score changes if the other variables were to change. For example, an increase in GDP would cause the Score value to increase by a factor of 1.1. $\beta_0$'s value is 1.88 which means that a company with 0's in all factors would have a happiness score of 1.88 put it way in last place. Taking our $\alpha$ value to be .05, we can't reject our null hypothesis for the Perceptions of Corruption and Generosity metrics.
+
+  
