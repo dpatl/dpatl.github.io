@@ -2,25 +2,33 @@
 title: "World Happiness Report Data"
 output: html_document
 ---
-# Introduction  
+### **Introduction**  
 
 Do you love where you live and are shocked why everyone just doesn't live in your country? Or maybe you absolutely hate where you live and don't understand why anyone would move to your country. Either way, you can get your questions answered through this R analysis! We will perform a data science pipeline on the World Happiness Report.
 The World Happiness Report is a dataset released by the United Nations anually that rank's countries based on happiness levels. The report contains a Happiness Score that is then used to determine a countries rank relative to other country's scores. There are different metrics are juxtaposed with the score and I was curious to see which one metric could be singled out (if at all) to be the best predictor of a country's score. 
 
 To learn more about the World Happiness Report visit : http://worldhappiness.report/ed/2018/  
 
-# Required Libraries  
+### **Required Libraries**  
 Replication of analysis requires RStudio version 3.4.3 and the following libraries.
-```{r setup, include= TRUE, message = FALSE}
+```{r setup, include= TRUE, message = FALSE, warning = FALSE}
 require(rvest)
 require(magrittr)
 require(dplyr)
 require(tidyr)
 require(ggplot2)
 require(tree)
+require(maps)
+library(ggmap)
+library(stringr)
+library(rworldmap)
+require(RColorBrewer)
+library(randomForest)
+library(ISLR)
+library(cvTools)
 ```
 
-# 1. Gather Data
+### **1. Gather Data**
 Welcome to the first step in the data pipeline! We can't perform any operations or conduct any analysis until we have data to work with. Because we are strong, independent data scientists, we do not require a CSV file to be provided beforehand. Instead, we obtain our data through a process called HTML scraping. HTML scraping involves using pre-existing html files in webpages to extract the data we are interested in. 
 
 ```{r data, include = TRUE, warning = FALSE}
@@ -40,11 +48,11 @@ Hey that's a pretty good looking data frame! However, looks can be decieving and
 
 
 
-# 2. Tidy Data 
+### **2. Tidy Data** 
 
 Tidying data is a process where data scientists structure a dataset to make it easier to perform analysis and operations on the data. Hidden in this data frame is a single NA, or missing entry for our Perceptions of Corruption column for the entity identifying as the United Arab Emirates. Unfortunately, I have no friends in the United Nations and so I never got an answer to why this entry was missing, but that's okay, we will continue on using plan B, imputing data. Imputing data requires us to insert a value for the missing entry in an unbiased way. We will accomplish this by calculating the mean of Perceptions of Corruption and inserting that value as our missing data. This will ensure the central tendency of the data is the same.
 
-Another checkpoint for tidy data is ensuring that column types match their values. Everything is dandy up until Perceptions of Corruption. This column is encoded as "/<chr>/" or string which mean's all of its values will also be a string. This is detrimental to our methods because we have to compute the mean of the column to use in imputing for our missing data and the mean of strings makes no sense. Let's convert every value in the column to a double.
+Another checkpoint for tidy data is ensuring that column types match their values. Everything is dandy up until Perceptions of Corruption. This column is encoded as "chr vector" or string which mean's all of its values will also be a string. This is detrimental to our methods because we have to compute the mean of the column to use in imputing for our missing data and the mean of strings makes no sense. Let's convert every value in the column to a double.
 ```{r tidy, include = TRUE, warning = FALSE}
 df_2018 <- 
   df_2018 %>% 
@@ -58,20 +66,179 @@ as_tibble(df_2018)
 ```  
 Our data set is looking good! We're ready to explore.
 
-# Exploratory Data Analysis    
-```{r EDA, include = TRUE, warning = FALSE, message = FALSE}
+
+### **3. Exploratory Data Analysis** 
+Lets look at our original mean and standard deviation before we do any data transformations.
+```{r mean, include = TRUE}
+mean <- mean(df_2018$Score)
+mean
+std <- sd(df_2018$Score)
+std
+```  
+
+A country, lets call it mean country, with the scoreof 5.375 would lie between the 78th and 79th observations in our data. In other words mean country would be happier than Greece but not as happy as Serbia.
+##### **3.1 Data Transformation**
+Now, we will center out data, and then scale it. The centering can be done by subtracting the mean of the score from each observations' score. Scaling can be done by dividing by the standard deviation. 
+```{r std, include = TRUE}
+standardized_df <- df_2018 %>%
+  mutate(mean_score = mean(Score)) %>%
+  mutate(sd_aff = sd(Score)) %>%
+  mutate(z_aff = (Score - mean_score) / sd_aff)
+mean_std <- mean(standardized_df$z_aff)
+mean_std
+std_std <- sd(standardized_df$Score)
+std_std
+
+```
+Great now we have a standardized dataset. Note the new value of our mean (it's a miniscule number but it should be 0 in a perfect world). This is the effect of standardizing.
+
+
+##### **3.2 Visualization**
+Let's begin with some simple visuals. Below are three graphs, the first two will be scatter plots of Score vs GDP and Score vs Health Expectancy, and the final graph will be a box plot of Score vs Freedom.
+```{r SvGDP, include = TRUE, warning = FALSE, message = FALSE}
+
 df_2018 %>% ggplot(aes(x= Score, y = GDP)) + geom_point() + geom_smooth(lm = loess) + labs(title = "Score vs GDP")
+```  
+
+Treating Score as the independent variable, we see GDP rises as Score increases. We will test this inclination more thoroughly through a linear regression model later.  
+
+```{r SvHE, include = TRUE, warning = FALSE, message = FALSE}
 
 df_2018 %>% ggplot(aes(x= Score, y = Health_Expectancy)) + geom_point() + geom_smooth(lm = loess) + labs(title = "Score vs Health Expectancy")
+```  
 
+Treating Score as the independent variable, we see Health Expectancy rises as Score increases. We will test this inclination more thoroughly through a linear regression model later.  
+
+```{r SvF, include = TRUE, warning = FALSE, message = FALSE}
 df_2018 %>% ggplot(aes(x= Score, y = Freedom)) + geom_boxplot() + labs(title = "Score vs Freedom")
 ```  
 
-# Machine Learning  
+I chose a boxplot for freedom to switch thigs up a bit. Box plots have 5 metrics that they display(also called the five number summary) - minimum, maximum, first quartile, third quartile, and mean. Box plots also show distribution. From the plot we can justify that half of the data has a Freedom score of .35-.6 and the mean is around .5.
+
+##### **3.2.1 World Map**
+
+To easily discertain which countries have a high Happiness score vs countries that do not have a high happiness score, we will create a world map. Each country will be colored a shade of green where the darkest green indicates a high happiness score and a light color indicates a poor happiness score. 
+ 
+```{r WorldMap, include = TRUE, echo = TRUE, results= FALSE, warning=FALSE, message=FALSE, verbose=FALSE}
+d <- data.frame(
+  country=df_2018$Country,
+  value=df_2018$Score)
+cols <- colorRampPalette(brewer.pal(7,"Greens"))(length(df_2018))
+n <- invisible(joinCountryData2Map(d, joinCode="NAME", nameJoinColumn="country"))
+mapCountryData(n, nameColumnToPlot="value", mapTitle="World Map for Happiness Score",colourPalette=cols, oceanCol = "#CCCCCCCC", addLegend = TRUE,aspect = 1.1, borderCol = "Black", lwd =.1)
+``` 
+
+
+### **4 Machine Learning** 
+Machine learning is the process where a computer is fed data, the more the merrier, that is then used by the computer to simulate interactions and create a prediction. Let's begin by defining what our model should predict. Our model will predict whether or not a country is a happy country or not based on it's score. Arbitrarily, a score of >5.375 indicates a happy country, anythin below that threshold is considered an unhappy country looking to improve it's conditions. Notice, the cutoff is the mean calculated in our Exploratory Data Analysis. By using this value, roughly half the countries in our data set will be happy and the other half will be unhappy.
+
+##### **4.1 Hypothesis Testing**
+The hypothesis testing framework is set up so that we use our findings to reject the hypothesis that a change in each factor does not change the score. We reject this null hypothesis if our p value is greater than our $\alpha$ value, which we will take to be .05.
+
+##### **4.2 Linear Regression**
+Let's fit a regression model to our data. This can be accomplished with the lm function. We want to see how Score changes based on all the relevant columns so our model should look something like :
+$$ Score \approx \beta_0 + \beta_1 \times GDP + \beta_2 \times SocialSupport + \beta_3 \times  HealthExpectancy + \beta_4 \times Freedom + \beta_5 \times Generosity + \beta_6 \times PerceptionsOfCorruption $$
 
 ```{r ML, include=TRUE}
 
-fit <- lm(Score ~ 1 + GDP+Social_Support+Health_Expectancy+ Health_Expectancy+Freedom+Generosity+Perceptions_Of_Corruption, data = df_2018)
+fit <- lm(Score ~ 1 + GDP+Social_Support+Health_Expectancy+Freedom+Generosity+Perceptions_Of_Corruption, data = df_2018)
 broom::tidy(fit) %>% knitr::kable() 
+```  
+
+The table above tells us how score changes if the other variables were to change. For example, an increase in GDP would cause the Score value to increase by a factor of 1.1. $\beta_0$'s value is 1.88 which means that a company with 0's in all factors would have a happiness score of 1.88 put it way in last place. Taking our $\alpha$ value to be .05, we can't reject our null hypothesis for the Perceptions of Corruption and Generosity metrics.  
+
+##### **4.3 Tree Based Methods**
+Tree based methods are antoher method in performing regression. A decision tree partitions our predictor(GDP) into regions and values(Score) are determine based on conditioning.
+```{r tree1, include = TRUE}
+tree <- tree(Score~GDP, data=df_2018)
+plot(tree)
+text(tree, pretty=0, cex=1.3)
+```  
+
+
+From this tree we can see that Score is determined based on conditioning on only GDP.  
+
+```{r tree2, include = TRUE}
+tree <- tree(Score~GDP+Social_Support+Health_Expectancy+Freedom, data=df_2018)
+plot(tree)
+text(tree, pretty=1, cex=.5)
+```  
+
+From this tree we can see that Score is determined based on conditioning on the relevant predictors observed through the linear regression model earlier.  
+
+##### **4.3.1 Random Forests**  
+
+```{r train, include = TRUE}
+set.seed(1234)
+train_indices <- sample(nrow(df_2018), nrow(df_2018)/2)
+train_set <- df_2018[train_indices,]
+test_set <- df_2018[-train_indices,]
+
+model <- randomForest(Score~GDP+Social_Support+Health_Expectancy+Freedom, importance=TRUE, mtry=3, data=train_set)
+plot(model)
+
 ```
+This plot shows the error rate based on the number of trees used. 500 trees is a bit too much, especially for this data set. According to https://www.researchgate.net/publication/230766603_How_Many_Trees_in_a_Random_Forest the optimal number of trees should be between 64 and 128 to optimize processing time and results.
+```{r rf, include = TRUE}
+variable_importance <- importance(model)
+knitr::kable(head(round(variable_importance, digits=2)))
+```  
+
+Once again, we see that GDP is the strongest predictor.  
+
+
+### **4.4 Cross Validation**  
+
+Thus far, we've seen linear regression and tree fit for our Happiness Data. Let's do one more, logistic regression, and then let's use cross validation to determine which model is better. Cross validation, specifically the t-test, obtains error rates by comparing predicted value to observed value and dtermines which model is a more accurate representation. Ultimately, a regression model will be fit of error rates to determine which model outperforms the other (based on comparing estimate values).  
+
+```{r cv, include = TRUE, warning = FALSE, message = FALSE}
+
+data(df_2018)
+df_2018 <- df_2018 %>% mutate(happy = ifelse(Score > 5.375, "Yes", "No"))
+fold_indices <- cvFolds(n=nrow(df_2018), K=10)
+
+error_rates <- sapply(1:10, function(fold_index) {
+  test_indices <- which(fold_indices$which == fold_index)
+  test_set <- df_2018[test_indices,]
+  train_set <- df_2018[-test_indices,]
+  
+  logis_fit <- glm(Score~GDP+Social_Support+Health_Expectancy+Freedom+Generosity+Perceptions_Of_Corruption, data=train_set)
+  logis_pred <-ifelse(predict(logis_fit, newdata=test_set, type="response") > 5.375,"Yes","No")
+  logis_error <- mean(test_set$happy != logis_pred)
+  
+  tree_fit <- tree(Score~GDP+Social_Support+Health_Expectancy+Freedom+Generosity+Perceptions_Of_Corruption, data=train_set)
+  pruned_tree <- prune.tree(tree_fit, best=3)
+
+  tree_pred <- ifelse(predict(pruned_tree, newdata=test_set) > 5.375, "Yes", "No")
+  tree_error <- mean(test_set$happy != tree_pred)
+  c(logis_error, tree_error)
+  })
+rownames(error_rates) <- c("logis", "tree")
+error_rates <- as.data.frame(t(error_rates))
+
+error_rates <- error_rates %>%
+  mutate(fold=1:n()) %>%
+  gather(method,error,-fold)
+
+error_rates %>%
+  head() %>%
+  knitr::kable("html")
+
+dotplot(error~method, data=error_rates, ylab="Mean Prediction Error")
+
+lm(error~method, data=error_rates) %>% 
+  broom::tidy() %>%
+  knitr::kable()
+```
+We see that both models have very similar estimates and thus we cannot justify one model being superior to the other.  
+
+### **Conclusion**
+
+The World Happiness report is a useful report produced by the United Nations that allow's the nations to see how it's citizens' happiness level relates to other country's happiness levels. To a data scientist, this report opens up alot more avenues to go take a ride on. Questions suchas "what specific characteristics of a nation determine it's citizens' happiness level?" and "which of those characteristics should a nation look to improve upon to ensure it's citizens are happy?" (hey if you made it this far now you know!) can be answered through the data science pipeline process.
+
+To answer the quesitons above, we know that GDP is the strongest indicator of happiness. A country dissappointed in it's score should look to increase it's GDP per capita first-and-foremost.Obtaining better ratings in Health Expectancy, Social Support, and Freedom wouldn't hurt, and Generosity and Perceptions of Corruptness may be hit or miss (all of those metrics would help it's just a matter of which one a country should focus on to maximize return on time and resource investment into bettering it's happiness score)
+
+Congratulations! You're now a data scientist. To flex your new muscles I encourage you to ask different questions about this report and solve them using the data science pipeline. To get you started: If a Utopia is considered a 9.5 on the Happiness score and a dystopia is a .5, curate all the past Happiness reports and answer the two questions "which country is on it's way to becoming the first Utopia?" and "Which country is on it's way to becoming the first Dystopia?". Hint: Figure out how each country's score changes over time and extrapolate using machine learning techniques learned in this tutorial.
+
+
   
