@@ -212,15 +212,15 @@ as_tibble(df_2018)</code></pre>
 </div>
 <div id="exploratory-data-analysis" class="section level3">
 <h3><strong>3. Exploratory Data Analysis</strong></h3>
-<p>Our data set is now tidy so we can start analyzing and inferring information from our data manipulation operations. This is accomplsihed through data visualization, and statistical measures.</p>
-<p>Lets look at our original mean and stanard deviation before we do any data transformations.</p>
+<p>Our data set is now tidy so we can start analyzing and inferring information from our data manipulation operations. This is accomplished through data visualization, and statistical measures.</p>
+<p>Let's look at our original mean and standard deviation before we do any data transformations.</p>
 <pre class="r"><code>mean &lt;- mean(df_2018$Score)
 mean</code></pre>
 <pre><code>## [1] 5.375917</code></pre>
 <pre class="r"><code>std &lt;- sd(df_2018$Score)
 std</code></pre>
 <pre><code>## [1] 1.119506</code></pre>
-<p>A country, lets call it mean country, with the scoreof 5.375 would lie between the 78th and 79th observations in our data. In other words mean country would be happier than Greece but not as happy as Serbia.</p>
+<p>A country, lets call it mean country, with the score of 5.375 would lie between the 78th and 79th observations in our data. In other words mean country would be happier than Greece but not as happy as Serbia.</p>
 <div id="data-transformation" class="section level5">
 <h5><strong>3.1 Data Transformation</strong></h5>
 <p>Now, we will center out data, and then scale it. The centering can be done by subtracting the mean of the score from each observations’ score. Scaling can be done by dividing by the standard deviation.</p>
@@ -263,7 +263,7 @@ mapCountryData(n, nameColumnToPlot=&quot;value&quot;, mapTitle=&quot;World Map f
 </div>
 <div id="machine-learning" class="section level3">
 <h3><strong>4 Machine Learning</strong></h3>
-<p>Machine learning is the process where a computer is fed data, the more the merrier, that is then used by the computer to simulate interactions and create a prediction. Let’s begin by defining what our model should predict. Our model will predict whether or not a country is a happy country or not based on it’s score. Arbitrarily, a score of &gt;5.375 indicates a happy country, anythin below that threshold is considered an unhappy country looking to improve it’s conditions. Notice, the cutoff is the mean calculated in our Exploratory Data Analysis. By using this value, roughly half the countries in our data set will be happy and the other half will be unhappy.</p>
+<p>Machine learning is the process where a computer is fed data, the more the merrier, that is then used by the computer to simulate interactions and create a prediction. Let’s begin by defining what our model should predict. Our model will predict whether or not a country is a happy country or not based on it’s score. Arbitrarily, a score of &gt;5.375 indicates a happy country, anything below that threshold is considered an unhappy country looking to improve it’s conditions. Notice, the cutoff is the mean calculated in our Exploratory Data Analysis. By using this value, roughly half the countries in our data set will be happy and the other half will be unhappy.</p>
 <div id="hypothesis-testing" class="section level5">
 <h5><strong>4.1 Hypothesis Testing</strong></h5>
 <p>The hypothesis testing framework is set up so that we use our findings to reject the hypothesis that a change in each factor does not change the score. We reject this null hypothesis if our p value is greater than our <span class="math inline">\(\alpha\)</span> value, which we will take to be .05.</p>
@@ -339,7 +339,7 @@ broom::tidy(fit) %&gt;% knitr::kable() </code></pre>
 </div>
 <div id="tree-based-methods" class="section level5">
 <h5><strong>4.3 Tree Based Methods</strong></h5>
-<p>Tree based methods are antoher method in performing regression. A decision tree partitions our predictor(GDP) into regions and values(Score) are determine based on conditioning.</p>
+<p>Tree based methods are antoher method in performing regression. A decision tree partitions our predictor (GDP) into regions and values (Score) are determine based on conditioning.</p>
 <pre class="r"><code>tree &lt;- tree(Score~GDP, data=df_2018)
 plot(tree)
 text(tree, pretty=0, cex=1.3)</code></pre>
@@ -399,7 +399,7 @@ knitr::kable(head(round(variable_importance, digits=2)))</code></pre>
 </div>
 <div id="cross-validation" class="section level5">
 <h5><strong>4.4 Cross Validation</strong></h5>
-<p>Thus far, we’ve seen linear regression and tree fit for our Happiness Data. Let’s do one more, logistic regression, and then let’s use cross validation to determine which model is better. Cross validation, specifically the t-test, obtains error rates by comparing predicted value to observed value and dtermines which model is a more accurate representation. Ultimately, a regression model will be fit of error rates to determine which model outperforms the other (based on comparing estimate values).</p>
+<p>Thus far, we’ve seen linear regression and tree fit for our Happiness Data. Let’s do one more, logistic regression, and then let’s use cross validation to determine which model is better. Cross validation, specifically the t-test, obtains error rates by comparing predicted value to observed value and determines which model is a more accurate representation. Ultimately, a regression model will be fit of error rates to determine which model outperforms the other (based on comparing estimate values).</p>
 <pre class="r"><code>data(df_2018)
 df_2018 &lt;- df_2018 %&gt;% mutate(happy = ifelse(Score &gt; 5.375, &quot;Yes&quot;, &quot;No&quot;))
 fold_indices &lt;- cvFolds(n=nrow(df_2018), K=10)
@@ -550,7 +550,7 @@ logis
 </div>
 <div id="conclusion" class="section level3">
 <h3><strong>Conclusion</strong></h3>
-<p>The World Happiness report is a useful report produced by the United Nations that allow’s the nations to see how it’s citizens’ happiness level relates to other country’s happiness levels. To a data scientist, this report opens up alot more avenues to go take a ride on. Questions suchas “what specific characteristics of a nation determine it’s citizens’ happiness level?” and “which of those characteristics should a nation look to improve upon to ensure it’s citizens are happy?” (hey if you made it this far now you know!) can be answered through the data science pipeline process.</p>
+<p>The World Happiness report is a useful report produced by the United Nations that allows the nations to see how it’s citizens’ happiness level relates to other country’s happiness levels. To a data scientist, this report opens up alot more avenues to go take a ride on. Questions such as “what specific characteristics of a nation determine it’s citizens’ happiness level?” and “which of those characteristics should a nation look to improve upon to ensure it’s citizens are happy?” (hey if you made it this far now you know!) can be answered through the data science pipeline process.</p>
 <p>To answer the quesitons above, we know that GDP is the strongest indicator of happiness. A country dissappointed in it’s score should look to increase it’s GDP per capita first-and-foremost.Obtaining better ratings in Health Expectancy, Social Support, and Freedom wouldn’t hurt, and Generosity and Perceptions of Corruptness may be hit or miss (all of those metrics would help it’s just a matter of which one a country should focus on to maximize return on time and resource investment into bettering it’s happiness score)</p>
 <p>Congratulations! You’re now a data scientist. To flex your new muscles I encourage you to ask different questions about this report and solve them using the data science pipeline. To get you started: If a Utopia is considered a 9.5 on the Happiness score and a dystopia is a .5, curate all the past Happiness reports and answer the two questions “which country is on it’s way to becoming the first Utopia?” and “Which country is on it’s way to becoming the first Dystopia?”. Hint: Figure out how each country’s score changes over time and extrapolate using machine learning techniques learned in this tutorial.</p>
 </div>
